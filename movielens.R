@@ -275,7 +275,7 @@ predicted_ratings <-
 rmse_ui_reg  <- RMSE(predicted_ratings, validation$rating)
 
 
-# 1) KNN approach 
+# 1) KNN approach  
 
 
 
