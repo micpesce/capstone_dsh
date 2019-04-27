@@ -313,7 +313,7 @@ model <- train(
   trControl = trainControl("cv", number = 10),
   preProcess = c("center","scale"),
   data=data, method = "knn",
-  tuneGrid = data.frame(k = seq(80, 150, 5))
+  tuneGrid = data.frame(k = seq(70, 120, 5))
 )
 # Plot model error RMSE vs different values of k
 plot(model)
