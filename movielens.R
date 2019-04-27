@@ -198,8 +198,8 @@ edx %>% count(movieId)   %>% mutate( RateShare=ifelse(.$n>5,"moreThanFive","less
 #@@@@@@@@@@@@@@@ Training and test set for CV##########
 set.seed(1)
 test_index <- createDataPartition(y = edx$rating, times = 1, p = 0.1, list = FALSE)
-edx_train <- movielens[-test_index,]
-temp <- movielens[test_index,]
+edx_train <- edx[-test_index,]
+temp <- edx[test_index,]
 
 # Make sure userId and movieId in validation set are also in edx set
 
@@ -275,11 +275,82 @@ predicted_ratings <-
 rmse_ui_reg  <- RMSE(predicted_ratings, validation$rating)
 
 
-# 1) KNN approach  b
+# 1) KNN approach  
+
+library(caret)
+library(dplyr)
+
+#######Sample for testing computing time
+edx_sample <- sample_n(edx, 200000)
+set.seed(1)
+test_index <- createDataPartition(y = edx_sample$rating, times = 1, p = 0.1, list = FALSE)
+edx_sample_train <- edx_sample[-test_index,]
+temp <- edx_sample[test_index,]
+
+# Make sure userId and movieId in validation set are also in edx_sample set
+
+edx_sample_test <- temp %>% 
+  semi_join(edx_sample, by = "movieId") %>%
+  semi_join(edx_sample, by = "userId")
+
+# Add rows removed from validation set back into edx_sample set
+
+removed <- anti_join(temp, edx_sample_test)
+edx_sample_train <- rbind(edx_sample_train, removed)
+
+rm( test_index, temp, removed)
+
+####end sample#######################################################
 
 
+# Fit the model on the edx_sample training set
+Sys.time()
+set.seed(123)
+y <- edx_sample_train$rating
+data=subset(edx_sample_train,select=c("movieId","userId","genreId")) #selecting only the predictors
+model <- train(
+  y=y, x=data,
+  trControl = trainControl("cv", number = 10),
+  preProcess = c("center","scale"),
+  data=data, method = "knn",
+  tuneGrid = data.frame(k = seq(80, 150, 5))
+)
+# Plot model error RMSE vs different values of k
+plot(model)
+# Best tuning parameter k that minimize the RMSE
+model$bestTune
+# Make predictions on the test data
+predictions <- model %>% predict(edx_sample_test)
+head(predictions)
+# Compute the prediction error RMSE
+rmse_knn <-RMSE(predictions, edx_sample_test$rating)
+Sys.time()
 
 
+#@@@@@@@@@@ Fit the KNN model on the whole edx training set
+Sys.time()
+set.seed(123)
+y <- edx$rating
+data=subset(edx,select=c("movieId","userId","genreId")) #selecting only the predictors
+model <- train(
+  y=y, x=data,
+  trControl = trainControl("cv", number = 10),
+  preProcess = c("center","scale"),
+  data=data, method = "knn",
+  tuneGrid = data.frame(k = seq(70, 130, 5))
+)
+# Plot model error RMSE vs different values of k
+plot(model)
+# Best tuning parameter k that minimize the RMSE
+model$bestTune
+# Make predictions on the test data
+predictions <- model %>% predict(validation)
+head(predictions)
+# Compute the prediction error RMSE
+rmse_knn <-RMSE(predictions, validation$rating)
+Sys.time()
+
+#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
 #As the simplest and naive approach we can predict the label only by computing the average rating of the train-set
 mu <- mean(edx$rating)
