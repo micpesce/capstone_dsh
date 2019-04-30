@@ -281,7 +281,7 @@ library(caret)
 library(dplyr)
 
 #######Sample for testing computing time
-edx_sample <- sample_n(edx, 200000)
+edx_sample <- sample_n(edx, 600000)
 set.seed(1)
 test_index <- createDataPartition(y = edx_sample$rating, times = 1, p = 0.1, list = FALSE)
 edx_sample_train <- edx_sample[-test_index,]
@@ -307,13 +307,14 @@ rm( test_index, temp, removed)
 Sys.time()
 set.seed(123)
 y <- edx_sample_train$rating
-data=subset(edx_sample_train,select=c("movieId","userId","genreId")) #selecting only the predictors
+#data=subset(edx_sample_train,select=c("movieId","userId","genreId")) #selecting only the predictors
+data=subset(edx_sample_train,select=c("movieId","userId")) #selecting only the predictors
 model <- train(
   y=y, x=data,
   trControl = trainControl("cv", number = 10),
   preProcess = c("center","scale"),
   data=data, method = "knn",
-  tuneGrid = data.frame(k = seq(70, 120, 5))
+  tuneGrid = data.frame(k = seq(60, 90, 5))
 )
 # Plot model error RMSE vs different values of k
 plot(model)
@@ -331,13 +332,14 @@ Sys.time()
 Sys.time()
 set.seed(123)
 y <- edx$rating
-data=subset(edx,select=c("movieId","userId","genreId")) #selecting only the predictors
+#data=subset(edx,select=c("movieId","userId","genreId")) #selecting only the predictors
+data=subset(edx,select=c("movieId","userId")) #selecting only the predictors
 model <- train(
   y=y, x=data,
   trControl = trainControl("cv", number = 10),
   preProcess = c("center","scale"),
   data=data, method = "knn",
-  tuneGrid = data.frame(k = seq(70, 130, 5))
+  tuneGrid = data.frame(k = seq(40, 110, 5))
 )
 # Plot model error RMSE vs different values of k
 plot(model)
@@ -351,6 +353,15 @@ rmse_knn <-RMSE(predictions, validation$rating)
 Sys.time()
 
 #@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+
+
+
+edx %>% separate_rows(genres, sep = "\\|") %>%
+  group_by(genres) %>%
+  summarize(count = n()) %>%
+  arrange(desc(count))
+
 
 #As the simplest and naive approach we can predict the label only by computing the average rating of the train-set
 mu <- mean(edx$rating)

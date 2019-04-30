@@ -1,0 +1,102 @@
+---
+title: "Movielens"
+author: "Michele Pesce"
+date: "30 aprile 2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+load("baseMovielens.RData")
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Overview
+
+The goal of this project is to predict ratings of a recommender dataset whose name is **Movielens**. This is a regression problem since the *rating* label is a numeric continuos variable, so that the target is to minimize RMSE. The dataset consist of one million records, so it's very hard for  desktop hardware systems to execute ML algorithm without waiting too long, then only a particular modeling approach has been possible using the whole data. This huge dataset would be better computed by a very powerful system or parallelized in clusters. The dataframe **Movielens** has been split in **edx** as train set and **validation** as validation set. 
+
+# Data Cleaning
+
+The first operation that have to be done on data is to check the presence of the inconsistent values that could affect the correctness of analysis. Generally, if we don’t take in count incoherent values, mean and sd could be affected by bias, all the further analisys would be affected by some kind of error.
+Using the R summary tools we can see if there are NA’s on the movielens dataframe
+
+```{r movielens}
+dim(movielens)
+summary(movielens)
+```
+As shown in the table, there are not NA’S or empty values, so all the metrics are calculated on true data.
+
+
+- **The genres**
+
+     There are 797 genres, but in the most of cases, they are combination of different genres. As shown in        the    first plot, there is great variability across genres, in the sense that blockbusters have much        more votes    than cult movies. Generally, with this kind of variability, regularization should be           considered: items with   few votes have lower weight compared to that most voted. The second plot            suggests that the average rating   has some variability across genres and this fact could be useful in       improving prediction. 
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE}
+
+library(tidyverse)
+
+genre_domain <- movielens %>% 
+  group_by(genres) %>% summarize(votes=n(),rating = mean(rating) )
+nGenres <- genre_domain %>%  nrow(.)
+df1 <- data.frame(x=c(1:nGenres), y=genre_domain$votes)
+df2 <- data.frame(x=c(1:nGenres), y=genre_domain$rating)
+ggplot(df1,aes(x=df1$x,y=df1$y)) +
+  ggtitle(" Genre distribution")+ geom_point() + scale_y_log10() +
+  scale_x_continuous(limits=c(0,nGenres))+xlab("Genre")+ ylab("Votes")
+ggplot(df2,aes(x=df2$x,y=df2$y)) +
+  ggtitle(" Genre vs rating")+ geom_point() +
+  scale_x_continuous(limits=c(0,nGenres))+xlab("Genre")+ ylab("rating") +
+  geom_smooth()
+```
+
+-	**The movieId**
+
+      As shown in the next 2 plots, and as intuition suggests, the movieId is a central feature that  must        be used as predictor. On the y axis of the first plot the scale is logarithmic to make  the                 graphics more readable.   There is great variability, among movies and votes. The second plot               shows movie versus average rating, the smoothing gives fair evidence of variation, but also  some           apparent outliers that should be treated with    regularization approach.
+
+```{r   echo=FALSE, warning=FALSE, message=FALSE}
+
+library(tidyverse)
+movie_domain <- movielens %>% 
+  group_by(movieId) %>% summarize(votes=n(),rating = mean(rating) )
+nMovies <- movie_domain %>%  nrow(.)
+df1 <- data.frame(x=c(1:nMovies), y=movie_domain$votes)
+df2 <- data.frame(x=c(1:nMovies), y=movie_domain$rating)
+ggplot(df1,aes(x=df1$x,y=df1$y)) +
+  ggtitle(" Movie distribution")+ geom_point() + scale_y_log10() +
+  scale_x_continuous(limits=c(0,nMovies))+xlab("Movies")+ ylab("Votes")
+ggplot(df2,aes(x=df2$x,y=df2$y)) +
+  ggtitle(" Movie vs rating")+ geom_point() +
+  scale_x_continuous(limits=c(0,nMovies))+xlab("MovieItem")+ ylab("rating") +
+  geom_smooth()
+```
+
+
+-	**The userId**
+
+      The following two plots show users vs votes and ratings. 
+
+```{r   echo=FALSE, warning=FALSE, message=FALSE}
+
+#users distribution and effect
+user_domain <- movielens %>% 
+  group_by(userId) %>% summarize(votes=n(), rating = mean(rating))
+nUsers <- user_domain %>%  nrow(.)
+df1 <- data.frame(x=c(1:nUsers), y=user_domain$votes )
+df2 <- data.frame(x=c(1:nUsers), y=user_domain$rating)
+
+ggplot(df1,aes(x=df1$x,y=df1$y)) +
+  ggtitle(" User distribution")+ geom_point() + scale_y_log10() +
+  scale_x_continuous(limits=c(0,nUsers))+xlab("Users")+ ylab("Votes")
+ggplot(df2,aes(x=df2$x,y=df2$y)) +
+  ggtitle(" User VS rating")+ geom_point() +
+  scale_x_continuous(limits=c(0,nUsers))+xlab("Users")+ ylab("rating") +
+  geom_smooth(span = 0.1)
+
+``` 
+
+  the first one shows in y axis - in the log mode scale – the amount of preferences among the users, the      graphics appears quite uniform, but there is a wide range of preferences, between the most active           giving  `r {range(user_domain$votes)[2]}`  ratings to the laziest who gives `r {range(user_domain$votes)[1]}` .     
+  The second plot shows Users vs rating, the smoothing function does not give a very useful information,      but   such a wide range of votes should be taken in account when valuing  RMSE.
+    
+```{r   echo=FALSE, warning=FALSE, message=FALSE}
+
+rm(df1, df2,user_domain,movie_domain)
+```
