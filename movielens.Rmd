@@ -69,7 +69,6 @@ ggplot(df2,aes(x=df2$x,y=df2$y)) +
   geom_smooth()
 ```
 
-
 -	**The userId**
 
       The following two plots show users vs votes and ratings. 
@@ -92,11 +91,208 @@ ggplot(df2,aes(x=df2$x,y=df2$y)) +
   geom_smooth(span = 0.1)
 
 ``` 
-
-  the first one shows in y axis - in the log mode scale – the amount of preferences among the users, the      graphics appears quite uniform, but there is a wide range of preferences, between the most active           giving  `r {range(user_domain$votes)[2]}`  ratings to the laziest who gives `r {range(user_domain$votes)[1]}` .     
-  The second plot shows Users vs rating, the smoothing function does not give a very useful information,      but   such a wide range of votes should be taken in account when valuing  RMSE.
+    The first one shows in y axis - in the log mode scale – the amount of preferences among the users,
+    the graphics appears quite uniform, but there is a wide range of preferences, between the most active       giving `r {range(user_domain$votes)[2]}` ratings to the laziest who gives `r {range(user_domain$votes)[1]}`.      
+    The second plot shows Users vs rating, the smoothing function does not give a very useful information,      but   such a wide range of votes should be taken in account when valuing  RMSE.
     
 ```{r   echo=FALSE, warning=FALSE, message=FALSE}
 
 rm(df1, df2,user_domain,movie_domain)
 ```
+- **Timestamp** 
+
+    The next graphics shows the relationship between the two variables. The time base chosen for the            analysis is the week; with the support of the smoothing function, it’s quite clear that the timestamp       has some effect on rating, but not so strong to be considered as a predictor factor. 
+  
+```{r   echo=FALSE, warning=FALSE, message=FALSE}
+
+library(lubridate)
+movielens %>% mutate(datetime = round_date(as_datetime(timestamp))) %>% mutate(rating_week=week(datetime))%>%
+  group_by(rating_week) %>%
+  summarize(rating = mean(rating)) %>%
+  ggplot(aes(rating_week, rating)) +
+  geom_point() +
+  geom_smooth()
+
+
+movielens %>% mutate(datetime = round_date(as_datetime(timestamp))) %>% mutate(rating_day=day(datetime))%>%
+  group_by(rating_day) %>%
+  summarize(rating = mean(rating)) %>%
+  ggplot(aes(rating_day, rating)) +
+  geom_point() +
+  geom_smooth()
+
+
+``` 
+
+	
+
+- **Title**
+
+    The title has the same information of movieId ( the difference is only the data type)
+    and could be adopted only for some visualization.
+
+
+- **Correlation** 
+
+    At the end of data exploration, it’s important to inspect the relationship between variables, if two or     more of them are correlated, they would give quite same information about prediction, so we will choose     only the ones with no relationship among them. Using the R function ggcorr() from the GGally library, we     can see at one glance the correlation between the numeric  movielens variables, apart from not numeric      variables that we early decided to keep out. Furthermore, because of the low prediction effect,             rating_week factor will not be considered. The genreId is related to the string variable genres which       have   been converted into numeric to be evaluated in the correlation computation. 
+```{r   echo=FALSE, warning=FALSE, message=FALSE}
+
+library(GGally)
+ggcorr(movielens,label = TRUE, label_alpha = TRUE)
+
+
+``` 
+
+#	The modeling approach
+
+To apply the machine learning concepts the data frame must be split in two data set: 
+
+•	The training set which will be used to train the ML algorithm
+
+•	The test set on which the ML algorithm trained on training set will be implemented to make the predictions
+
+In this project the **movielens** df is split in the **edx** data frame as training set and the **validation** data frame as test set.
+The *rating* is the variable to predict, it’s a numeric real type so the model to be used is “regression” and the metric for the evaluation is the RMSE
+
+-	**Regularization and the user+movie effect approach**
+
+    This approach is based on the processing of the following formula:
+    $Y_{u,i} = \mu + b_i + b_u + \varepsilon_{u,i}$
+    
+    
+    
+    Where:
+    
+    •	$Y_{u,i}$ = The rating based on user+movie effect
+    
+    •	$\mu$= The average rating
+    
+    •	$b_i$= movie effect
+    
+    •	$b_u$= user effect
+    
+    •	$\varepsilon_{u,i}$= error
+    
+    Although this is a valid approach, the rating distribution through movies, as hinted in the above           paragraph, tells that some movies are rated more than others. Next graphics shows movies versus ratings.     The graphic is split in two parts: the upper in blue referring to the movies with more than five            ratings, the lower in red to that movies with five or lower number of ratings. The red section, just as     an example, shows that movies with few users ratings is a minor but a significant part of data. This are     noisy data, that should be processed by regularization. 
+
+```{r   echo=FALSE, warning=FALSE, message=FALSE}
+
+
+nMovies <- edx %>% count(movieId) %>% nrow(.) #total movies
+edx %>% count(movieId)   %>% mutate( RateShare=ifelse(.$n>5,"moreThanFive","lessThanFive")) %>%
+  ggplot(aes(x=c(1:nMovies),y=.$n, color=RateShare)) +
+  ggtitle(" Ratings Distribution by movie")+ geom_point() + scale_y_log10() +
+  scale_x_continuous(limits=c(0,nMovies))+xlab("Movies")+ ylab("Total ratings")
+
+
+``` 
+
+  To overcome the problem of this kind of variability it must be considered a mathematical model that         minimizes the effect of low number of ratings and emphasize the weight of high rated movies. The            central element of this model is a parameter is $\lambda$ which must be chosen after tuning                 operations, the formulas are:
+   
+  $\hat{b}_i(\lambda) = \frac{1}{\lambda + n_i} \sum_{u=1}^{n_i} \left(Y_{u,i} - \hat{\mu}\right)$
+  
+  $\hat{b}_u(\lambda) = \frac{1}{\lambda + n_i} \sum_{u=1}^{n_i} \left(Y_{u,i} - \hat{\mu}-\hat{b_i}\right)$
+  
+    The tuning processing consists of a CROSS VALIDATION procedure, so we must further split the **edx** dataframe in two data frames:
+    
+  - The *edx_train* that is used to calculate $\hat{b}_i(\lambda)$ and $\hat{b}_u(\lambda)$
+  - The *edx_test* that is used to calculated RMSEs.
+  
+    Then, we can plot the CROSS VALIDATION results.
+
+```{r   echo=FALSE, warning=FALSE, message=FALSE}
+
+
+#@@@@@@@@@@@@@@@ Training and test set for CV##########
+library(caret)
+set.seed(1)
+test_index <- createDataPartition(y = edx$rating, times = 1, p = 0.1, list = FALSE)
+edx_train <- edx[-test_index,]
+temp <- edx[test_index,]
+
+# Make sure userId and movieId in validation set are also in edx set
+
+edx_test <- temp %>% 
+  semi_join(edx_train, by = "movieId") %>%
+  semi_join(edx_train, by = "userId")
+
+# Add rows removed from validation set back into edx set
+
+removed <- anti_join(temp, edx_test)
+edx_train <- rbind(edx_train, removed)
+
+rm( test_index, temp, removed)
+
+#######################################################
+
+
+``` 
+
+```{r   echo=FALSE, warning=FALSE, message=FALSE}
+
+
+# In the general mathematical formula lambda acts as a penalty when the n amount of ratings for a given movie
+#is low, viceversa it is ignored when the n is high
+lambdas <- seq(0, 10, 0.25)
+
+rmses <- sapply(lambdas, function(l){
+  
+  mu <- mean(edx_train$rating)
+  
+  b_i <- edx_train %>% 
+    group_by(movieId) %>%
+    summarize(b_i = sum(rating - mu)/(n()+l))
+  
+  b_u <- edx_train %>% 
+    left_join(b_i, by="movieId") %>%
+    group_by(userId) %>%
+    summarize(b_u = sum(rating - b_i - mu)/(n()+l))
+  
+  predicted_ratings <- 
+    edx_test %>% 
+    left_join(b_i, by = "movieId") %>%
+    left_join(b_u, by = "userId") %>%
+    mutate(pred = mu + b_i + b_u) %>%
+    pull(pred)
+  
+  return(RMSE(predicted_ratings, edx_test$rating))
+})
+
+ggplot2::qplot(lambdas, rmses)  
+
+best_lambda <- lambdas[which.min(rmses)] #the lambda that minimize RMSE on the edx_test set
+
+``` 
+
+   Next, let's apply the *best_lambda* on the target edx and validation sets and finally         calculate predicted ratings
+   
+   
+```{r   echo=FALSE, warning=FALSE, message=FALSE}
+
+
+#@@@@@@@@@@@@@@@ Training and test set for CV##########
+b_i <- edx %>% 
+  group_by(movieId) %>%
+  summarize(b_i = sum(rating - mu)/(n()+best_lambda))
+
+b_u <- edx %>% 
+  left_join(b_i, by="movieId") %>%
+  group_by(userId) %>%
+  summarize(b_u = sum(rating - b_i - mu)/(n()+best_lambda))
+
+predicted_ratings <- 
+  validation %>% 
+  left_join(b_i, by = "movieId") %>%
+  left_join(b_u, by = "userId") %>%
+  mutate(pred = mu + b_i + b_u) %>% .$pred
+
+#the user+movie effect rmse 
+
+rmse_ui_reg  <- RMSE(predicted_ratings, validation$rating)
+
+#######################################################
+
+
+```
+
+    The RMSE is: `r {RMSE(predicted_ratings, validation$rating)}`
