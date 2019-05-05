@@ -1,7 +1,7 @@
 ---
 title: "Movielens"
 author: "Michele Pesce"
-date: "30 aprile 2019"
+date: "5 Maggio 2019"
 output: pdf_document
 ---
 
@@ -12,25 +12,57 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Overview
 
-The goal of this project is to predict ratings of a recommender dataset whose name is **Movielens**. This is a regression problem since the *rating* label is a numeric continuos variable, so that the target is to minimize RMSE. The dataset consist of one million records, so it's very hard for  desktop hardware systems to execute ML algorithm without waiting too long, then only a particular modeling approach has been possible using the whole data. This huge dataset would be better computed by a very powerful system or parallelized in clusters. The dataframe **Movielens** has been split in **edx** as train set and **validation** as validation set. 
+The goal of this project is prediction ratings of a recommender dataset whose name is **Movielens**. This is a regression problem since the *rating* label is a numeric continuos variable, so that the target is to minimize RMSE. The dataset consistS of ten million records, so it's very hard for  desktop hardware systems to execute ML algorithms without waiting too long or crashing, then only a particular modeling approach has been possible using the whole data. This huge dataset would be better computed by a very powerful system or parallelized in clusters. The dataframe **Movielens** has been split in **edx** as train set and **validation** as validation set.  This document reports the following sections:
+
+- **Data cleaning** In this section,  the data integrity is explored, and possibly executed all the operations to make the dataset assessable for further analisys
+
+- **Data exploration** Variables in the dataset are explored and checked in order to choose the relevant factors that could be used as predictors for the target labels.
+
+- **The modeling approach** ML algorithms that best fit the kind of problem are chosen to predict the outcome, on the basis of the predictors assesed on the data exploration section. Usually, more than an ML is checked and tuned and chosen the one that minimize rmse or maximize accuracy.
+
+- **Results** The ML outcomes are compared, and evaluated pros and cons of the different approaches.
+
+- **Conclusions** To summary the operations, and take in consideration further different approaches that could improve the project and the results
 
 # Data Cleaning
 
-The first operation that have to be done on data is to check the presence of the inconsistent values that could affect the correctness of analysis. Generally, if we don’t take in count incoherent values, mean and sd could be affected by bias, all the further analisys would be affected by some kind of error.
-Using the R summary tools we can see if there are NA’s on the movielens dataframe
+The first operation  on data is to check the presence of  inconsistent values that could affect the correctness of analysis. Generally, if we don’t take in count incoherent values, mean and sd could be affected by bias, all the further analisys would be affected by some kind of error.
+Using the R summary tools we can see if there are NA’s on the movielens  dataframe (`r {dim(movielens)[1]}` records, `r {dim(movielens)[2]}` variables).
 
-```{r movielens}
-dim(movielens)
-summary(movielens)
+This is the summary: 
+
+
+
+
+
+
+```{r movielens, eval=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+
+summary_movielens <- summary(movielens)
+
+saveRDS(summary_movielens,"summary_movielens.rds")
+
 ```
+
+
+```{r loadSummary, echo=FALSE, message=FALSE, warning=FALSE}
+
+summary_movielens <-readRDS("summary_movielens.rds")
+summary_movielens
+```
+
 As shown in the table, there are not NA’S or empty values, so all the metrics are calculated on true data.
 
 
+# Data Exploration
+
+In this section the variables are evaluated and explored using some visualization tecniques. First of all, the variability is took in consideration, but It's useful to ckeck the relationship with the "rating" label. Finally the correlation review.  
+
 - **The genres**
 
-     There are 797 genres, but in the most of cases, they are combination of different genres. As shown in        the    first plot, there is great variability across genres, in the sense that blockbusters have much        more votes    than cult movies. Generally, with this kind of variability, regularization should be           considered: items with   few votes have lower weight compared to that most voted. The second plot            suggests that the average rating   has some variability across genres and this fact could be useful in       improving prediction. 
+     There are 797 genres, but in the most of cases, they are combination of different genres. As shown in        the    first plot, there is great variability across genres, in the sense that blockbusters have much        more votes    than cult movies. Generally, with this kind of variability, regularization should be           considered: items with   few votes have lower weight compared to that most voted. The second plot            suggests that the average rating   has some variability across genres and this fact could be useful to improve prediction. 
 
-```{r  echo=FALSE, warning=FALSE, message=FALSE}
+```{r genre, echo=FALSE, message=FALSE, warning=FALSE}
 
 library(tidyverse)
 
@@ -48,13 +80,13 @@ ggplot(df2,aes(x=df2$x,y=df2$y)) +
   geom_smooth()
 ```
 
+
 -	**The movieId**
 
       As shown in the next 2 plots, and as intuition suggests, the movieId is a central feature that  must        be used as predictor. On the y axis of the first plot the scale is logarithmic to make  the                 graphics more readable.   There is great variability, among movies and votes. The second plot               shows movie versus average rating, the smoothing gives fair evidence of variation, but also  some           apparent outliers that should be treated with    regularization approach.
 
-```{r   echo=FALSE, warning=FALSE, message=FALSE}
+```{r movieId, echo=FALSE, message=FALSE, warning=FALSE}
 
-library(tidyverse)
 movie_domain <- movielens %>% 
   group_by(movieId) %>% summarize(votes=n(),rating = mean(rating) )
 nMovies <- movie_domain %>%  nrow(.)
@@ -73,7 +105,7 @@ ggplot(df2,aes(x=df2$x,y=df2$y)) +
 
       The following two plots show users vs votes and ratings. 
 
-```{r   echo=FALSE, warning=FALSE, message=FALSE}
+```{r userId, echo=FALSE, message=FALSE, warning=FALSE}
 
 #users distribution and effect
 user_domain <- movielens %>% 
@@ -92,18 +124,19 @@ ggplot(df2,aes(x=df2$x,y=df2$y)) +
 
 ``` 
     The first one shows in y axis - in the log mode scale – the amount of preferences among the users,
-    the graphics appears quite uniform, but there is a wide range of preferences, between the most active       giving `r {range(user_domain$votes)[2]}` ratings to the laziest who gives `r {range(user_domain$votes)[1]}`.      
+    the plot looks quite uniform, but there is a wide range of preferences, between the most active       giving `r {range(user_domain$votes)[2]}` ratings to the laziest who gives `r {range(user_domain$votes)[1]}`.      
     The second plot shows Users vs rating, the smoothing function does not give a very useful information,      but   such a wide range of votes should be taken in account when valuing  RMSE.
     
-```{r   echo=FALSE, warning=FALSE, message=FALSE}
+```{r removeTemp, echo=FALSE, message=FALSE, warning=FALSE}
 
-rm(df1, df2,user_domain,movie_domain)
+#removing temp objects
+rm(df1, df2,user_domain,movie_domain,genre_domain)
 ```
 - **Timestamp** 
 
     The next graphics shows the relationship between the two variables. The time base chosen for the            analysis is the week; with the support of the smoothing function, it’s quite clear that the timestamp       has some effect on rating, but not so strong to be considered as a predictor factor. 
   
-```{r   echo=FALSE, warning=FALSE, message=FALSE}
+```{r timeStamp, echo=FALSE, message=FALSE, warning=FALSE}
 
 library(lubridate)
 movielens %>% mutate(datetime = round_date(as_datetime(timestamp))) %>% mutate(rating_week=week(datetime))%>%
@@ -135,7 +168,7 @@ movielens %>% mutate(datetime = round_date(as_datetime(timestamp))) %>% mutate(r
 - **Correlation** 
 
     At the end of data exploration, it’s important to inspect the relationship between variables, if two or     more of them are correlated, they would give quite same information about prediction, so we will choose     only the ones with no relationship among them. Using the R function ggcorr() from the GGally library, we     can see at one glance the correlation between the numeric  movielens variables, apart from not numeric      variables that we early decided to keep out. Furthermore, because of the low prediction effect,             rating_week factor will not be considered. The genreId is related to the string variable genres which       have   been converted into numeric to be evaluated in the correlation computation. 
-```{r   echo=FALSE, warning=FALSE, message=FALSE}
+```{r correlation, echo=FALSE, message=FALSE, warning=FALSE}
 
 library(GGally)
 ggcorr(movielens,label = TRUE, label_alpha = TRUE)
@@ -175,7 +208,7 @@ The *rating* is the variable to predict, it’s a numeric real type so the model
     
     Although this is a valid approach, the rating distribution through movies, as hinted in the above           paragraph, tells that some movies are rated more than others. Next graphics shows movies versus ratings.     The graphic is split in two parts: the upper in blue referring to the movies with more than five            ratings, the lower in red to that movies with five or lower number of ratings. The red section, just as     an example, shows that movies with few users ratings is a minor but a significant part of data. This are     noisy data, that should be processed by regularization. 
 
-```{r   echo=FALSE, warning=FALSE, message=FALSE}
+```{r ratingDist, echo=FALSE, message=FALSE, warning=FALSE}
 
 
 nMovies <- edx %>% count(movieId) %>% nrow(.) #total movies
@@ -187,20 +220,20 @@ edx %>% count(movieId)   %>% mutate( RateShare=ifelse(.$n>5,"moreThanFive","less
 
 ``` 
 
-  To overcome the problem of this kind of variability it must be considered a mathematical model that         minimizes the effect of low number of ratings and emphasize the weight of high rated movies. The            central element of this model is a parameter is $\lambda$ which must be chosen after tuning                 operations, the formulas are:
+  To overcome the problem of this kind of variability, it must be considered a mathematical model that         minimizes the effect of low number of ratings and emphasize the weight of high rated movies. The            central element of this model is a parameter  $\lambda$ which must be chosen after tuning                 operations, the formulas are:
    
   $\hat{b}_i(\lambda) = \frac{1}{\lambda + n_i} \sum_{u=1}^{n_i} \left(Y_{u,i} - \hat{\mu}\right)$
   
   $\hat{b}_u(\lambda) = \frac{1}{\lambda + n_i} \sum_{u=1}^{n_i} \left(Y_{u,i} - \hat{\mu}-\hat{b_i}\right)$
   
-    The tuning processing consists of a CROSS VALIDATION procedure, so we must further split the **edx** dataframe in two data frames:
+   The tuning process consists of a CROSS VALIDATION procedure, which shoul be done only in training set, so we must further split the **edx** dataframe in two data frames:
     
   - The *edx_train* that is used to calculate $\hat{b}_i(\lambda)$ and $\hat{b}_u(\lambda)$
-  - The *edx_test* that is used to calculated RMSEs.
+  - The *edx_test* as part of train data seta  is used to compute RMSEs.
   
     Then, we can plot the CROSS VALIDATION results.
 
-```{r   echo=FALSE, warning=FALSE, message=FALSE}
+```{r splitEDX, echo=FALSE, message=FALSE, warning=FALSE}
 
 
 #@@@@@@@@@@@@@@@ Training and test set for CV##########
@@ -228,11 +261,10 @@ rm( test_index, temp, removed)
 
 ``` 
 
-```{r   echo=FALSE, warning=FALSE, message=FALSE}
+```{r CVregUI, eval=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
 
 
-# In the general mathematical formula lambda acts as a penalty when the n amount of ratings for a given movie
-#is low, viceversa it is ignored when the n is high
+# In the general mathematical formula lambda acts as a penalty when the n amount of ratings for a given movie is low, viceversa it is ignored when the n is high
 lambdas <- seq(0, 10, 0.25)
 
 rmses <- sapply(lambdas, function(l){
@@ -258,16 +290,26 @@ rmses <- sapply(lambdas, function(l){
   return(RMSE(predicted_ratings, edx_test$rating))
 })
 
-ggplot2::qplot(lambdas, rmses)  
+model_UI <- data.frame(lambdas,rmses)
+saveRDS(model_UI,"regUI.rds")
 
-best_lambda <- lambdas[which.min(rmses)] #the lambda that minimize RMSE on the edx_test set
 
-``` 
+```
 
+```{r loadRegUI, echo=FALSE, message=FALSE, warning=FALSE}
+
+model_UI <- readRDS("regUI.rds")
+
+
+ggplot2::qplot(model_UI$lambdas, model_UI$rmses)  
+
+best_lambda <- model_UI$lambdas[which.min(model_UI$rmses)] #the lambda that minimize RMSE on the edx_test set
+
+```
    Next, let's apply the *best_lambda* on the target edx and validation sets and finally         calculate predicted ratings
    
    
-```{r   echo=FALSE, warning=FALSE, message=FALSE}
+```{r MLregUI, echo=FALSE, message=FALSE, warning=FALSE}
 
 
 #@@@@@@@@@@@@@@@ Training and test set for CV##########
@@ -287,12 +329,140 @@ predicted_ratings <-
   mutate(pred = mu + b_i + b_u) %>% .$pred
 
 #the user+movie effect rmse 
-
 rmse_ui_reg  <- RMSE(predicted_ratings, validation$rating)
+
+#remobìving temp objects
+remove(b_i, b_u, predicted_ratings)
 
 #######################################################
 
 
 ```
 
-    The RMSE is: `r {RMSE(predicted_ratings, validation$rating)}`
+  The RMSE is: `r {rmse_ui_reg}`
+    
+-	**KNN approach**  
+  
+The KNN ML algorithm has been used only on a sample of the whole edx dataframe. The reason is that it takes too long to compute 10M records dataset. Although the sample is the 6% of total records, the available hardware tooks about 12 hour computation time
+
+```{r model_knn, eval=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+
+#@@@@@@@@@@@@@@@ Training and test set for CV##########
+edx_sample <- sample_n(edx, 600000)
+# Fit the model on the edx_sample training set
+set.seed(123)
+y <- edx_sample$rating
+data=subset(edx_sample,select=c("movieId","userId")) #selecting only the predictors
+model_knn <- train(
+  y=y, x=data,
+  trControl = trainControl("cv", number = 10),
+  preProcess = c("center","scale"),
+  data=data, method = "knn",
+  tuneGrid = data.frame(k = seq(90, 140, 2))
+)
+remove(y,data) # removing temp variables
+
+#Saving the model result
+
+saveRDS(model_knn, "model_knn.rds")
+
+#######################################################
+ 
+
+```
+
+```{r LOAD_MODEL_knn, echo=FALSE, message=FALSE, warning=FALSE}
+
+#The model_knn, to avoid long time running, is computed once, stored and loaded after for fast running
+model_knn <- readRDS("model_knn.rds")
+plot(model_knn)
+
+
+
+ 
+
+```
+
+The model_knn object has been saved on a file for safety. The computed best K is
+ `r {model_knn$bestTune[1,1]}` on a range [90,130] step by 2, this is the plot
+ 
+
+
+```{r predict_knn, eval=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+
+  edx_sample_test <- validation %>% 
+  semi_join(edx_sample, by = "movieId") %>%
+  semi_join(edx_sample, by = "userId")
+  predictions <- model_knn %>% predict(edx_sample_test)
+
+# Compute once the prediction error RMSE and save in a file
+rmse_knn <-RMSE(predictions, edx_sample_test$rating)
+saveRDS(predictions, "predict_knn.rds")
+remove(predictions)
+
+#save rmses in file
+a <- c("knn","uireg")
+b <- c(rmse_knn,rmse_ui_reg)
+computed_rmses <- data.frame(a,b)
+names(computed_rmses) <- c("method","rmse")
+saveRDS(computed_rmses,"rmses.rds")
+
+#removing all used objects after the results ave been saved in files
+remove(edx_sample,edx_sample_test,edx_test,edx_train)
+
+
+
+
+ 
+
+```
+
+```{r LOAD_RMSE_knn, echo=FALSE, message=FALSE, warning=FALSE}
+
+#The model_knn, to avoid long time running, is computed once, stored and loaded later for fast running
+computed_rmses <- readRDS("rmses.rds")
+rmse_knn <- computed_rmses[1,2]
+
+
+
+ 
+
+```
+
+The RMSE is: `r {rmse_knn}`
+
+#Results
+
+The results of the two modeling approach are the following `r {computed_rmses %>% knitr::kable()}`
+
+As described in the above section the Knn approach takes in count only the 6% of the entire dataset, this is only the final model. Many attepts have been done before this final result: different samples have been tested ( 3%, 5%) and different tuning parameters have been chosed from lower to higher k, any of this took long before the outcomes, even the 100% of data, but in this case the system crashed!. Probably different ML approaches or different tuning parameters would give better results. In any case the RMSE has been always above 1,00.
+The regularized UI approach has been faster, more effective and gave a good RMSE.
+ 
+ 
+ 
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+#Conclusions
+
+The results of regularized userId/movieId approcach are satisfactory, While KNN not. The genre factor has not been taken in consideration because of hardaware and computing systems restrictions. If computer clusters and parallel system were available, either al least a more powerful computer, It would be possible more advanced approaches, one of these would use matrix factorization. 
+Matrix factorization  is very much related to factor analysis, singular value decomposition (SVD) and principal component analysis (PCA). The model userId+moveId leaves out an important source of variation related to the fact that groups of movies have similar rating patterns and groups of users have similar rating patterns as well, so the approach would be greatly improved by studying the *residuals*.
+The concept is based on the fact that through residuals is possible to figure out the relationship between movie genres and rating, this wouold be a further step to improve RMSE.

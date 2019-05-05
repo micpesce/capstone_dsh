@@ -16,10 +16,10 @@ summary(movielens)
 ############################################################
 
 
-###@@@@@@@@@@@@@@@@@@ DATA EXPLORATION ########################
+###@@@@@@@@@@@@@@@@@@ DATA EXPLORATION ############################
 
-library(matrixStats)
 
+#######MOVIE EFFECTS visualization########
 #Generating a movie distribution plot: there are more than ten thousand 
 #movies, they have been grouped and numbered as consecutive to produce
 #uniform graphic ( the original movieId would appear with a central no data area)
@@ -28,8 +28,8 @@ library(matrixStats)
 movie_domain <- movielens %>% 
   group_by(movieId) %>% summarize(votes=n(),rating = mean(rating) )
 nMovies <- movie_domain %>%  nrow(.)
-df1 <- data.frame(x=c(1:nMovies), y=movie_domain$votes)
-df2 <- data.frame(x=c(1:nMovies), y=movie_domain$rating)
+df1 <- data.frame(x=c(1:nMovies), y=movie_domain$votes)  #temp dataframe
+df2 <- data.frame(x=c(1:nMovies), y=movie_domain$rating) #temp dataframe
 ggplot(df1,aes(x=df1$x,y=df1$y)) +
   ggtitle(" Movie distribution")+ geom_point() + scale_y_log10() +
   scale_x_continuous(limits=c(0,nMovies))+xlab("Movies")+ ylab("Votes")
@@ -41,15 +41,16 @@ ggplot(df2,aes(x=df2$x,y=df2$y)) +
 
 
 
+#######USERS EFFECTS visualization########
+#users distribution and effect. Two plots: the first shows  users distribution
+#vs grouped users. The second users VS rating
 
-#users distribution and effect
 user_domain <- movielens %>% 
   group_by(userId) %>% summarize(votes=n(), rating = mean(rating))
 nUsers <- user_domain %>%  nrow(.)
-df1 <- data.frame(x=c(1:nUsers), y=user_domain$votes )
-df2 <- data.frame(x=c(1:nUsers), y=user_domain$rating)
+df1 <- data.frame(x=c(1:nUsers), y=user_domain$votes ) #temp dataframe
+df2 <- data.frame(x=c(1:nUsers), y=user_domain$rating) #temp dataframe
 
-range(user_domain$votes)
 
 ggplot(df1,aes(x=df1$x,y=df1$y)) +
   ggtitle(" User distribution")+ geom_point() + scale_y_log10() +
@@ -58,13 +59,13 @@ ggplot(df2,aes(x=df2$x,y=df2$y)) +
   ggtitle(" User VS rating")+ geom_point() +
   scale_x_continuous(limits=c(0,nUsers))+xlab("Users")+ ylab("rating") +
   geom_smooth(span = 0.1)
-###
+
 rm(df1, df2,user_domain,movie_domain) # removing  temporary dataframes
 
+######
 
-##genre distribution
 
-                        #######TIME EFFECTS########
+#######TIME EFFECTS visualization########
 #The next two code blocks generates plots to show the time effects on rating. The first one is week based
 #the second day based. Both illustrates a weak influence on rating, so the time will not be considered 
 # as predictor
@@ -84,13 +85,10 @@ movielens %>% mutate(datetime = round_date(as_datetime(timestamp))) %>% mutate(r
   geom_point() +
   geom_smooth()
 
-
-
-
 ###############################
 
 
-
+#######GENRE EFFECTS visualization########
 #the next code is cumputed to build-up a numeric variabile called "genreId"  as a numeric
 #counterpart of the string "genre" variable
 genre_domain <- movielens %>% 
@@ -113,8 +111,8 @@ rm(movielens_temp,genre_domain,nGenres) #remove the temporary dfs and variables
 genre_domain <- movielens %>% 
   group_by(genres) %>% summarize(votes=n(),rating = mean(rating) )
 nGenres <- genre_domain %>%  nrow(.)
-df1 <- data.frame(x=c(1:nGenres), y=genre_domain$votes)
-df2 <- data.frame(x=c(1:nGenres), y=genre_domain$rating)
+df1 <- data.frame(x=c(1:nGenres), y=genre_domain$votes) #temp dataframe
+df2 <- data.frame(x=c(1:nGenres), y=genre_domain$rating) #temp dataframe
 ggplot(df1,aes(x=df1$x,y=df1$y)) +
   ggtitle(" Genre distribution")+ geom_point() + scale_y_log10() +
   scale_x_continuous(limits=c(0,nGenres))+xlab("Genre")+ ylab("Votes")
@@ -124,6 +122,8 @@ ggplot(df2,aes(x=df2$x,y=df2$y)) +
   geom_smooth()
 
 remove(df1,df2,genre_domain,movie_domain,movie_titles) #removibìng temporary dfs
+
+
 #@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@CORRELATION@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
 # As analysis final step, the correlation graphics will be created. Using the GGally
@@ -136,6 +136,7 @@ ggcorr(movielens,label = TRUE, label_alpha = TRUE)
 
 #@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 ###################################################################################
+
 
 #@@@@T@@@@@@@@@@@@@@@@@@@@@@@@@THE MODELING APPROACH###############################
 # The first step is to compute RMSE, that can be considered as a standard deviation between the true value in the test-set
@@ -275,12 +276,12 @@ predicted_ratings <-
 rmse_ui_reg  <- RMSE(predicted_ratings, validation$rating)
 
 
-# 1) KNN approach  
+# 2) KNN approach  
 
 library(caret)
 library(dplyr)
 
-#######Sample for testing computing time
+#######6% Sample of entire edx df########### 
 edx_sample <- sample_n(edx, 600000)
 set.seed(1)
 test_index <- createDataPartition(y = edx_sample$rating, times = 1, p = 0.1, list = FALSE)
@@ -304,17 +305,16 @@ rm( test_index, temp, removed)
 
 
 # Fit the model on the edx_sample training set
-Sys.time()
+Sys.time() #start time for evaluating computing time 
 set.seed(123)
 y <- edx_sample_train$rating
-#data=subset(edx_sample_train,select=c("movieId","userId","genreId")) #selecting only the predictors
 data=subset(edx_sample_train,select=c("movieId","userId")) #selecting only the predictors
 model <- train(
   y=y, x=data,
   trControl = trainControl("cv", number = 10),
   preProcess = c("center","scale"),
   data=data, method = "knn",
-  tuneGrid = data.frame(k = seq(60, 90, 5))
+  tuneGrid = data.frame(k = seq(60, 100, 5))
 )
 # Plot model error RMSE vs different values of k
 plot(model)
@@ -325,21 +325,21 @@ predictions <- model %>% predict(edx_sample_test)
 head(predictions)
 # Compute the prediction error RMSE
 rmse_knn <-RMSE(predictions, edx_sample_test$rating)
-Sys.time()
+Sys.time() #stop time for evalueting computing time 
 
 
 #@@@@@@@@@@ Fit the KNN model on the whole edx training set
-Sys.time()
+#not to be run on the 10M Dataframe on desktop system!!
+Sys.time() 
 set.seed(123)
 y <- edx$rating
-#data=subset(edx,select=c("movieId","userId","genreId")) #selecting only the predictors
 data=subset(edx,select=c("movieId","userId")) #selecting only the predictors
 model <- train(
   y=y, x=data,
-  trControl = trainControl("cv", number = 10),
+  trControl = trainControl("cv", number = 5),
   preProcess = c("center","scale"),
   data=data, method = "knn",
-  tuneGrid = data.frame(k = seq(40, 110, 5))
+  tuneGrid = data.frame(k = seq(70, 95, 5))
 )
 # Plot model error RMSE vs different values of k
 plot(model)
@@ -347,7 +347,7 @@ plot(model)
 model$bestTune
 # Make predictions on the test data
 predictions <- model %>% predict(validation)
-head(predictions)
+
 # Compute the prediction error RMSE
 rmse_knn <-RMSE(predictions, validation$rating)
 Sys.time()
@@ -355,110 +355,17 @@ Sys.time()
 #@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
 
-
-
-edx %>% separate_rows(genres, sep = "\\|") %>%
-  group_by(genres) %>%
-  summarize(count = n()) %>%
-  arrange(desc(count))
-
-
-#As the simplest and naive approach we can predict the label only by computing the average rating of the train-set
-mu <- mean(edx$rating)
-mu
-#[1] 3.512465
-
-#The first naive RMSE is computed as follows using mu_hat as the predicted value
-first_rmse <- RMSE(validation$rating, mu_hat)
-first_rmse
-#[1] 1.061202
-# The first_rmse is the result of a simplest and poorest approach. It can be improved if we consider user and movie effects.
-
-# As further step, we can consider the effect of movieId in order to make stronger our prediction; there is
-# strong variability among movies, genres. The true rating, so far,
-#can be thought as the sum of three components: the average, the movie effects,and a random error centered
-#on zero:Y=μ+b_i+εiu. The movie effects bi variability can be seen observing the following graphics,
-# computed by grouping movieIds and calculating distribution. 
-mu <- mean(edx$rating) 
-movies_variability <- edx %>% 
-  group_by(movieId) %>% 
-  summarize(b_i = mean(rating - mu))
-hist(movies_variability$b_i, main="Histogram of movies variability", xlab = "movieId" )
-
-# Now, let' s consider a more accurate approach by calculating a new predicted rating as Y_hat= mu+b_i
-# First of all, we must filter only the  b_i's referred to the movieId in the training AND test sets
-#to compute further the predictor Y_hat_i ( the "i" as movieId effect), and then compute the new RMSE. Finally, a table to show comparisons between 
-#RMSEs so far calculated
-b_i <- validation %>%  left_join(movies_variability, by='movieId') %>% .$b_i
-Y_hat_i= mu+b_i
-second_rmse <- RMSE(Y_hat_i, validation$rating)
-rmse_results <- data_frame(method = "Average rating", RMSE = first_rmse)
-rmse_results <- bind_rows(rmse_results,
-                          data_frame(method="Movie Effect Model",  
-                                     RMSE = second_rmse))
-rmse_results %>% knitr::kable()
-
-#|method             |      RMSE|
-#|:------------------|---------:|
-#|Average rating     | 1.0612018|
-#|Movie Effect Model | 0.9439087|
-
-
-#########################USER EFFECT######################
-#Next, using the same approach, let's add users effects
-
-#The following code compute histogram that shows variability among users, so that we can add this effect
-#to the general model: Yui=mu+b_i+b_u+εiu
-users_variability <- edx %>% group_by(userId) %>%  summarize(b_u = mean(rating))
-hist(users_variability$b_u, main="Histogram of users variability", xlab = "userId" )
-
-#Then the approximated b_u can be calculated as the difference between the rating in the train set and the sum 
-#of mu and approximated b_i computed early: b_u= Yui-(b_i+mu). So, the new approximated predictor defined as Y_hat_ui
-#is obtained as follows: Y_hat_ui=b_i+b_u+mu
-
-users_effect <- edx %>% left_join(movies_variability, by='movieId') %>%   group_by(userId) %>%
-summarize(b_u = mean(rating - mu - b_i))
-
-Y_hat_ui <- validation %>%  left_join(movies_variability, by='movieId') %>%  left_join(users_effect, by='userId') %>%
-  mutate( predictor = mu + b_i + b_u) %>% .$predictor
-
-third_rmse <- RMSE(Y_hat_ui, validation$rating)
-rmse_results <- bind_rows(rmse_results,
-                          data_frame(method="Movie + User Effects Model",  
-                                     RMSE =third_rmse))
-rmse_results %>% knitr::kable()
-
-#|method                     |      RMSE|
-#|:--------------------------|---------:|
-#|Average rating             | 1.0612018|
-#|Movie Effect Model         | 0.9439087|
-#|Movie + User Effects Model | 0.8653488|
-
-######################### MODEL IMPROVEMENT BY REGULARIZATION ######################
-#In order to improve the RMSE, It's worth to deepen data analysis. In particular, if we see the 
-#rating distribution through movies, we can observe that some movies are rated more than others.
+#save rmses in a dataframe and in a file
+a <- c("knn","uireg")
+b <- c(rmse_knn,rmse_ui_reg)
+computed_rmses <- data.frame(a,b)
+names(computed_rmses) <- c("method","rmse")
+saveRDS(computed_rmses,"rmses.rds")
 
 
 
-#@@@@@@@inserire qui il grafico@@@@@@@@
-
-#Next,the code that produces a table that shows the relationship between some high ratings movies
-#and the number of users ratings. In order to predict ratings, these are not reliable data because of
-#the very few number of ratings
-
-movie_titles <- movielens %>% 
-  select(movieId, title) %>%
-  distinct()
-
-edx %>% count(movieId) %>% 
-  left_join(movies_variability) %>%
-  left_join(movie_titles, by="movieId") %>%
-  arrange(desc(b_i)) %>% 
-  select(title, b_i, n) %>% 
-  slice(1:10) 
 
 
-#@@@@@@@@@@@Inserire qui tabella@@@@@@@@
 
 
 
